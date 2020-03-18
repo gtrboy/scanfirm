@@ -129,6 +129,7 @@ def main(path, keywords):
     logger.debug('********** Boot. Path = {}, Keywords = {} ************'.format(path, keywords))
     ExtractFiles(path)                 
     BinwalkFiles(path, keywords)
+    
 
 if __name__ == "__main__":
     if(len(sys.argv) != 3):
