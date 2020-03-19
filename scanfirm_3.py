@@ -5,7 +5,7 @@ import json
 import shutil,subprocess
 import operator as op
 
-suffix_list = [".web", ".bin", ".BIN", ".dav"]
+suffix_list = [".web", ".bin", ".BIN", ".dav", ".img", ".dmg"]
 num_of_matched_firm = 0
 num_of_total_firm = 0
 RESULT_LOG = '../log/result.dat'
@@ -36,10 +36,20 @@ def ExtractFiles(path):
             filepath = os.path.join(root,f)
             try:
                 if op.eq(f[-4:],'.zip')==True:
-                    logger.info('unzip file: {}'.format(filepath))
-                    cmd = 'unzip -q -o "' + filepath + '" -d "' + filepath[:-4] + '"'
-                    os.system(cmd)
-                    os.remove(filepath)
+                    precmd = 'unzip -l "' + filepath +'"'
+                    process = subprocess.Popen(precmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                    process.wait()
+                    unzip_out = process.stdout.read().decode('utf-8')
+                    unzip_flag = 0
+                    for i in range(len(suffix_list)):
+                        suffix = suffix_list[i]
+                        if suffix in unzip_out:
+                            unzip_flag = 1
+                    if unzip_flag == 1:
+                        logger.info('unzip file: {}'.format(filepath))
+                        cmd = 'unzip -q -o "' + filepath + '" -d "' + filepath[:-4] + '"'
+                        os.system(cmd)
+                        os.remove(filepath)
                 elif op.eq(f[-4:],'.rar')==True:
                     logger.info('unrar file: {}'.format(filepath))
                     if not os.path.exists(filepath[:-4]):
@@ -64,26 +74,28 @@ def BinwalkFiles(path, keywords):
                 firm_path = os.path.join(root,file)
                 extrdir_path = os.path.join(root, '_{}.extracted'.format(file))
                 logger.info('HANDLE FILE: {}'.format(firm_path))
-                try:
-                    cmd = 'binwalk -eq "' + firm_path + '" -C "' + root + '"'
-                    logger.info('command = {}'.format(cmd))
-                    os.system(cmd)
-                    if os.path.exists(extrdir_path):
-                        #在解包目录中查找关键词，之后删除目录
-                        logger.debug('binwalk SUCCESS, start find str.')
-                        matchSuccess = FindStr(firm_path, extrdir_path, keywords)
-                        if matchSuccess:
-                            num_of_matched_firm = num_of_matched_firm + 1
-                            logger.warning('[+] find str in {}'.format(firm_path))
-                        shutil.rmtree(extrdir_path)
-                        logger.debug('remove dir: {}'.format(extrdir_path))
-                    else:
-                        logger.info('binwalk FAILED, maybe the firmware is encrypted.')
-                except Exception as e:
-                    logger.error('[-] Error in BinwalkFiles, file: {}, info: {}'.format(firm_path, repr(e)))
-                    if os.path.exists(extrdir_path):
-                        shutil.rmtree(extrdir_path)
-                    continue
+                fsize = os.path.getsize(firm_path) / float(1024*1024)
+                if fsize < 100:
+                    try:
+                        cmd = 'binwalk -eq "' + firm_path + '" -C "' + root + '"'
+                        logger.info('command = {}'.format(cmd))
+                        os.system(cmd)
+                        if os.path.exists(extrdir_path):
+                            #在解包目录中查找关键词，之后删除目录
+                            logger.debug('binwalk SUCCESS, start find str.')
+                            matchSuccess = FindStr(firm_path, extrdir_path, keywords)
+                            if matchSuccess:
+                                num_of_matched_firm = num_of_matched_firm + 1
+                                logger.warning('[+] find str in {}'.format(firm_path))
+                            shutil.rmtree(extrdir_path)
+                            logger.debug('remove dir: {}'.format(extrdir_path))
+                        else:
+                            logger.info('binwalk FAILED, maybe the firmware is encrypted.')
+                    except Exception as e:
+                        logger.error('[-] Error in BinwalkFiles, file: {}, info: {}'.format(firm_path, repr(e)))
+                        if os.path.exists(extrdir_path):
+                            shutil.rmtree(extrdir_path)
+                        continue
 
 ##find keywords in files of a firmware
 def FindStr(firmpath, dirpath, keywords):
@@ -98,7 +110,7 @@ def FindStr(firmpath, dirpath, keywords):
             try:
                 file_path = os.path.join(root,file)
                 #print(file_path)
-                cmd = 'strings -d {} | grep -iE "{}"'.format(file_path, keywords)
+                cmd = 'strings -d {} | grep -E "{}"'.format(file_path, keywords)
                 #print (cmd)
                 process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 process.wait()
